@@ -1,0 +1,7 @@
+name: gitermap
+channels:
+  - defaults
+dependencies:
+  - python>=3.8
+  - joblib>=0.14.1
+# tqdm optional
