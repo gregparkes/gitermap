@@ -66,7 +66,10 @@ class MapContext:
         # determine parallel object
         if is_tqdm_installed(False):
             # load custom parallel tqdm object if we use it, else joblib normal.
-            return TqdmParallel(use_tqdm=True, total=n)
+            if n != -1:
+                return TqdmParallel(use_tqdm=True, total=n)
+            else:
+                return TqdmParallel(use_tqdm=True)
         else:
             return Parallel
 
@@ -111,7 +114,10 @@ class MapContext:
             if self.is_fitted():
                 # from joblib
                 C = cpu_count()
-                return self._estN if self._estN < C else (C - 1)
+                if self._estN < 0:
+                    return C - 1
+                else:
+                    return self._estN if self._estN < C else (C - 1)
             else:
                 return -1
         else:
@@ -144,13 +150,23 @@ class MapContext:
             print("writing to file '%s'" % _file)
         dump(data, _file)
 
+    def _estimate_n(self, *args):
+        # try and produce an `_estN` parameter. -1 means unobtainable
+        _len_args = list(map(lambda arg: hasattr(arg, "__len__"), args))
+        # if there are any true, compress and take the first one
+        if any(_len_args):
+            self._estN = len(list(it.compress(args, _len_args))[0])
+
     def _generator_args(self, *args):
         return args if self._Nargs == 0 else it.zip_longest(*args)
 
     def _wrap_tqdm(self, _gen_args):
         if is_tqdm_installed(False) and not (self.return_type == 'generator'):
             from tqdm import tqdm
-            return tqdm(_gen_args, position=0, total=self._estN)
+            tq_args = {"position": 0}
+            if self._estN != -1:
+                tq_args['total'] = self._estN
+            return tqdm(_gen_args, **tq_args)
         else:
             return _gen_args
 
@@ -174,6 +190,11 @@ class MapContext:
         # write joining together
         self._write_file(result, fn)
         return result
+
+    def _cache_chunk(self, i: int, fn: str, f: Callable, *args):
+        """Handles a chunk, given an int for iterator to call add suffix"""
+        subf = add_suffix(i, fn)
+        return self._cache_initial(subf, f, *args)
 
     def _map_comp(self, f, *args):
         _gen = self._wrap_tqdm(self._generator_args(*args))
@@ -201,17 +222,17 @@ class MapContext:
         check_file_path(self._fn, False, True, 0)
         # make a directory
         relfile, _ = create_cache_directory(self._fn)
-        # allocate chunk names.
-        fn_chunks = map(partial(add_suffix, filename=relfile), range(self._estN))
-        # now combine with generator args
-        _gen = self._wrap_tqdm(zip(fn_chunks, self._generator_args(*args)))
+        # combine generator args with a count iterator to add to the string suffix in _cache_chunk
+        _gen = self._wrap_tqdm(zip(it.count(), self._generator_args(*args)))
+        new_f = partial(self._cache_chunk, fn=relfile, f=f)
+
         # if we are dealing with parallel, then do so
         if self.ncpu == 1:
-            its_result = [self._cache_initial(name, f, *arg) for name, arg in _gen]
+            its_result = [new_f(i, *arg) for i, arg in _gen]
         else:
             ParallelObj = MapContext._get_parallel_object(self._estN)
             its_result = ParallelObj(self.ncpu)(
-                delayed(self._cache_initial)(name, f, *arg) for name, arg in _gen
+                delayed(new_f)(i, *arg) for i, arg in _gen
             )
         # return
         return its_result
@@ -249,7 +270,7 @@ class MapContext:
         """Determines whether the file already exists."""
         return self.is_filepath_set() and os.path.isfile(self._fn)
 
-    def compute(self, f: Callable, *args):
+    def compute(self, f: Callable, *args, **kwargs):
         """Computes the pipeline.
 
         Parameters
@@ -265,26 +286,26 @@ class MapContext:
             The results from f(*args) or from file
         """
         self._Nargs = len(args)
+        # create a new function that wraps keywords into the call
+        f_new = partial(f, **kwargs)
 
         if self._Nargs == 0:
-            return f()
+            return f_new()
         # compute the number of arguments, and potential list within each argument if multiple.
-        self._estN = len(args[0])
+        # if we have an iterable, just panick.
+        self._estimate_n(*args)
         # wrap in music?
-        try:
-            result = self._full_compute(f, *args)
-            # play music if possible
-            if self.end_audio:
-                MapContext._play_success()
-        except Exception as e:
-            if self.end_audio:
-                MapContext._play_failure()
-        return result
 
-    def compute_kw(self, f: Callable, *args, **kwargs):
-        """Compute the pipeline with keyword arguments."""
-        new_f = partial(f, **kwargs)
-        return self.compute(new_f, *args)
+        if self.end_audio:
+            try:
+                result = self._full_compute(f_new, *args)
+                # play music if possible
+                MapContext._play_success()
+                return result
+            except Exception as e:
+                MapContext._play_failure()
+        else:
+            return self._full_compute(f_new, *args)
 
     def clear(self):
         """Clears the cache."""

@@ -1,6 +1,14 @@
 # `gitermap`: Easy parallelizable and cacheable list comprehensions
 
-List comprehensions and `map()` operations are great in Python, but sometimes it would be nice if they just *did more*. gitermap allows users to work through a map operation with seemlessly integrated parallelization and automatic end-caching or step-by-step caching within your workflow. See below for a quick example:
+List comprehensions and `map()` operations are great in Python, but sometimes it would be nice if they just *did more*. gitermap allows users to work through a map operation with seemlessly integrated parallelization and automatic end-caching or step-by-step caching within your workflow. Key functionalities include:
+
+- Easy parallelization built on top of `joblib`
+- Automatic caching of results at the end of iteration (end-caching)
+- Automatic caching at each step of iteration (chunk-caching)
+
+## Examples
+
+See below for an example that is identical to `map()` function, except it returns a list instead of an iterable:
 
 ```python
 >>> from gitermap import umap
@@ -37,9 +45,45 @@ For particularly long runs, it may be necessary to store the result at each iter
 [1, 9, ...]
 ```
 
-Note that at the end of `umapcc`, the temporary directory and files are deleted, leaving only "temp.pkl".
+Note that at the end of `umapcc`, the temporary directory and files are deleted, leaving only "temp.pkl". See the below table summary of each function and what functionality it supports:
+
+| Function Name | Parallelization | End-Caching | Chunk-Caching |
+| --------- | -------------- | --------- | ----------- |
+| `umap` | &#x2612; | &#x2612; | &#x2612; |
+| `umapp` | &#x2611; | &#x2612; | &#x2612; |
+| `umapc` | &#x2612; | &#x2611; | &#x2612; |
+| `umappc` | &#x2611; | &#x2611; | &#x2612; |
+| `umapcc` | &#x2612; | &#x2611; | &#x2611; |
+| `umappcc` | &#x2611; | &#x2611; | &#x2611; |
+
+For more control over how many threads are used for parallelization, end sounds, keyword arguments in `f(...)` and so on, we expose an object called `MapContext`, passing in the `n_jobs` argument as you would for `joblib` or in scikit-learn (default=`None`, or 1):
+
+```python
+>>> import itertools as it
+>>> from gitermap import MapContext
+>>> with MapContext(n_jobs=-1) as ctx:
+>>>     result = ctx.compute(lambda x: x**2, it.islice(it.count(), 0, 100))
+>>> result
+[0, 1, 4, 9, ...]
+```
+
+Note that this is equivalent to `umap`, albeit in longer form - under the hood `umap` simply creates a `MapContext` object and calls compute like so.
+
 
 ## Requirements
 
-`gitermap` only technically requires a modern Python version (>=3.8) and `joblib` packages, which provides a lot of the grunt work for this project. We **highly** recommend also installing `tqdm` for beautiful progress bars on all list comprehension objects, but this is optional.
+The following requirements are essential for `gitermap`:
 
+- Python >= 3.8
+- `joblib` >= 1.4
+
+The following packages are highly recommended but not essential:
+
+- `tqdm` >= 1.0: For progressbars
+
+For ending sound in `MapContext`, you will also need:
+
+- `numpy`: For processing sound waves
+- `simpleaudio`: For playing sounds
+
+The other packages such as `itertools`, `functools` and more are default and come with the standard Python distribution.
