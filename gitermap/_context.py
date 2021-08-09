@@ -197,25 +197,22 @@ class MapContext:
         return self._cache_initial(subf, f, *args)
 
     def _map_comp(self, f, *args):
-        _gen = self._wrap_tqdm(self._generator_args(*args))
-        if self.verbose > 1:
-            print("Running chunk (n-args={}, n={})".format(self._Nargs, self._estN))
-        if self.return_type == 'list':
-            return [f(*arg) for arg in _gen]
-        elif self.return_type == 'generator':
-            return (f(*arg) for arg in _gen)
-
-    def _parallel_map_comp(self, f, *args):
-        ParallelObj = MapContext._get_parallel_object(self._estN)
-
+        #_gen = self._wrap_tqdm(self._generator_args(*args))
+        _argset = self._generator_args(*args)
         if self.verbose > 1:
             print("Running chunk (n-args={}, n={})".format(self._Nargs, self._estN))
 
-        if self._Nargs == 1:
-            itr_result = ParallelObj(self.ncpu)(delayed(f)(arg) for arg in args[0])
+        if self.ncpu == 1:
+            if self.return_type == 'list':
+                return [f(*arg) for arg in self._wrap_tqdm(_argset)]
+            elif self.return_type == 'generator':
+                return (f(*arg) for arg in self._wrap_tqdm(_argset))
         else:
-            itr_result = ParallelObj(self.ncpu)(delayed(f)(*arg) for arg in it.zip_longest(*args))
-        return itr_result
+            if self.return_type == 'list':
+                ParallelObj = MapContext._get_parallel_object(self._estN)
+                return ParallelObj(self.ncpu)(delayed(f)(*arg) for arg in _argset)
+            elif self.return_type == 'generator':
+                return (delayed(f)(*arg) for arg in self._wrap_tqdm(_argset))
 
     def _compute_chunks(self, f, *args):
         # check the valid file path exists.
@@ -223,16 +220,15 @@ class MapContext:
         # make a directory
         relfile, _ = create_cache_directory(self._fn)
         # combine generator args with a count iterator to add to the string suffix in _cache_chunk
-        _gen = self._wrap_tqdm(zip(it.count(), self._generator_args(*args)))
-        new_f = partial(self._cache_chunk, fn=relfile, f=f)
+        _gen = zip(it.count(), self._generator_args(*args))
 
         # if we are dealing with parallel, then do so
         if self.ncpu == 1:
-            its_result = [new_f(i, *arg) for i, arg in _gen]
+            its_result = [self._cache_chunk(i, relfile, f, *arg) for i, arg in self._wrap_tqdm(_gen)]
         else:
             ParallelObj = MapContext._get_parallel_object(self._estN)
             its_result = ParallelObj(self.ncpu)(
-                delayed(new_f)(i, *arg) for i, arg in _gen
+                delayed(self._cache_chunk)(i, relfile, f, *arg) for i, arg in _gen
             )
         # return
         return its_result
@@ -247,16 +243,10 @@ class MapContext:
                 MapContext._delete_temps(cachedir)
                 return result
             else:
-                # normal caching, maybe with parallelism
-                if self.ncpu == 1:
-                    return self.cachef(self._fn, self._map_comp, f, *args)
-                else:
-                    return self.cachef(self._fn, self._parallel_map_comp, f, *args)
+                return self.cachef(self._fn, self._map_comp, f, *args)
         else:
-            if self.ncpu == 1:
-                return self._map_comp(f, *args)
-            else:
-                return self._parallel_map_comp(f, *args)
+            return self._map_comp(f, *args)
+
 
     def is_fitted(self):
         """Whether 'compute' has been called. """
