@@ -5,6 +5,11 @@ List comprehensions and `map()` operations are great in Python, but sometimes it
 - Easy parallelization built on top of `joblib`
 - Automatic caching of results at the end of iteration (end-caching)
 - Automatic caching at each step of iteration (chunk-caching)
+- Additive caching for randomized repeats
+- Seemless integration with `itertools`, allowing for generators and functional computing
+
+`gitermap` provides simple access with useful accessory functions, and detailed access through
+exposure to underlying classes via `MapContext` which neatly wrap the complexity for you.
 
 ## Examples
 
@@ -21,11 +26,12 @@ This example works exactly as `map()` would do, except that with the `tqdm` pack
 ```python
 >>> # umap with end-caching
 >>> from gitermap import umapc
->>> umapc("temp.pkl", lambda x: x**2, [1, 3, 5])
-[1, 9, 25]
+>>> umapc("temp.pkl", lambda x, y: x**2 + y**2, [1, 3, 5], [2, 4, 6])
+[5, 25, 61]
 ```
 
-Under the hood, `umapc` uses joblib to dump the data to "temp.pkl" which is in the local directory of wherever the python code is running. Assuming independence between samples, we can perform parallelism across the iterable list using `umapp`:
+Under the hood, `umapc` uses joblib to dump the data to "temp.pkl" which is in the local directory of wherever the python code is running. The only requirement is that
+the function f(x) must return something picklable for joblib to use. Assuming independence between samples, we can perform parallelism across the iterable list using `umapp`:
 
 ```python
 >>> # umap with parallelism
@@ -67,8 +73,20 @@ For more control over how many threads are used for parallelization, end sounds,
 [0, 1, 4, 9, ...]
 ```
 
-Note that this is equivalent to `umap`, albeit in longer form - under the hood `umap` simply creates a `MapContext` object and calls compute like so.
+Note that this is equivalent to `umap`, albeit in longer form - under the hood `umap` simply creates
+a `MapContext` object and calls compute like so. Note that if you wish to have lazy evaluation by deferring execution,
+we provide this through the `return_type` parameter:
 
+```python
+>>> from gitermap import MapContext
+>>> with MapContext(return_type="generator") as ctx:
+>>>     result = ctx.compute(lambda x: x**2, range(20))
+>>> result
+<generator object MapContext._map_comp.<locals>.<genxpr> at 0x00000000000>
+```
+
+Note that generators do not also perform parallelization when evoked. 
+For further details, see the example notebooks within this project.
 
 ## Requirements
 

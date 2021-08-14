@@ -4,19 +4,19 @@ import warnings
 import os
 
 
-def check_file_path(path, create_folder, raise_error=True, verbose=0):
+def check_file_path(path: str, create_folder: bool, raise_error=True, verbose: int = 0):
     """Check the file path."""
     if raise_error and create_folder:
         warnings.warn("`raise_error` and `create_folder` cannot both be true, defaulting to `raise_error`")
 
-    def _remove_garb(x):
+    def _remove_garb(x: str):
         return x != "" and x != ".." and x.find(".") == -1
 
     # get a list of folders in order
     folders = list(filter(_remove_garb, path.split("/")))
 
     if verbose > 1:
-        print("folders: " + folders)
+        print("folders: {}".format(folders))
 
     # iterate through each folder subtype and check
     for f in folders:

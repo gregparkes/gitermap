@@ -2,7 +2,8 @@
 
 import warnings
 import os
-from functools import partial
+from functools import partial, reduce
+import operator
 from joblib import load, dump, cpu_count, Parallel, delayed
 import itertools as it
 from typing import Callable
@@ -22,6 +23,7 @@ class MapContext:
                  n_jobs: int = None,
                  chunks: bool = False,
                  return_type: str = "list",
+                 progressbar: bool = True,
                  savemode: str = "initial",
                  end_audio: bool = False):
         """Creates a context to wrap list comprehensions in.
@@ -57,21 +59,11 @@ class MapContext:
         self.has_chunks = chunks
         self.return_type = return_type
         self.savemode = savemode
+        self.progress = progressbar
         self.end_audio = end_audio if is_simpleaudio_installed() else False
         self._Nargs = -1
         self._estN = -1
-
-    @classmethod
-    def _get_parallel_object(cls, n):
-        # determine parallel object
-        if is_tqdm_installed(False):
-            # load custom parallel tqdm object if we use it, else joblib normal.
-            if n != -1:
-                return TqdmParallel(use_tqdm=True, total=n)
-            else:
-                return TqdmParallel(use_tqdm=True)
-        else:
-            return Parallel
+        self._result = []
 
     @classmethod
     def _is_generator(cls, obj):
@@ -95,6 +87,17 @@ class MapContext:
     def _play_failure(cls):
         """Plays a negative arpeggio"""
         play_arpeggio("C", "minor")
+
+    def _get_parallel_object(self):
+        # determine parallel object
+        if is_tqdm_installed(False) and self.progress:
+            # load custom parallel tqdm object if we use it, else joblib normal.
+            if self._estN != -1:
+                return TqdmParallel(use_tqdm=True, total=self._estN)
+            else:
+                return TqdmParallel(use_tqdm=True)
+        else:
+            return Parallel
 
     def __enter__(self):
         # check whether any data exists and load it if so.
@@ -158,17 +161,25 @@ class MapContext:
             self._estN = len(list(it.compress(args, _len_args))[0])
 
     def _generator_args(self, *args):
-        return args if self._Nargs == 0 else it.zip_longest(*args)
+        return args if self._Nargs == 0 else zip(*args)
 
     def _wrap_tqdm(self, _gen_args):
-        if is_tqdm_installed(False) and not (self.return_type == 'generator'):
+        if is_tqdm_installed(False) and not (self.return_type == 'generator') and self.progress:
             from tqdm import tqdm
-            tq_args = {"position": 0}
-            if self._estN != -1:
-                tq_args['total'] = self._estN
-            return tqdm(_gen_args, **tq_args)
+            return tqdm(_gen_args, position=0, total=self._estN)
         else:
             return _gen_args
+
+    def _generate(self, result):
+        """Receives a 'generator' result and determines whether to run or not."""
+        if self.return_type == 'generator':
+            return result
+        else:
+            if self.ncpu == 1:
+                return list(result)
+            else:
+                ParallelObj = self._get_parallel_object()
+                return ParallelObj(self.ncpu)(result)
 
     def _cache_initial(self, fn, f, *args):
         if os.path.isfile(self._fn):
@@ -191,28 +202,15 @@ class MapContext:
         self._write_file(result, fn)
         return result
 
-    def _cache_chunk(self, i: int, fn: str, f: Callable, *args):
-        """Handles a chunk, given an int for iterator to call add suffix"""
-        subf = add_suffix(i, fn)
-        return self._cache_initial(subf, f, *args)
-
     def _map_comp(self, f, *args):
-        #_gen = self._wrap_tqdm(self._generator_args(*args))
         _argset = self._generator_args(*args)
         if self.verbose > 1:
-            print("Running chunk (n-args={}, n={})".format(self._Nargs, self._estN))
-
+            print("Generating chunk (n-args={}, n={})".format(self._Nargs, self._estN))
         if self.ncpu == 1:
-            if self.return_type == 'list':
-                return [f(*arg) for arg in self._wrap_tqdm(_argset)]
-            elif self.return_type == 'generator':
-                return (f(*arg) for arg in self._wrap_tqdm(_argset))
+            result = (f(*arg) for arg in self._wrap_tqdm(_argset))
         else:
-            if self.return_type == 'list':
-                ParallelObj = MapContext._get_parallel_object(self._estN)
-                return ParallelObj(self.ncpu)(delayed(f)(*arg) for arg in _argset)
-            elif self.return_type == 'generator':
-                return (delayed(f)(*arg) for arg in self._wrap_tqdm(_argset))
+            result = (delayed(f)(*arg) for arg in _argset)
+        return self._generate(result)
 
     def _compute_chunks(self, f, *args):
         # check the valid file path exists.
@@ -220,18 +218,11 @@ class MapContext:
         # make a directory
         relfile, _ = create_cache_directory(self._fn)
         # combine generator args with a count iterator to add to the string suffix in _cache_chunk
-        _gen = zip(it.count(), self._generator_args(*args))
-
-        # if we are dealing with parallel, then do so
-        if self.ncpu == 1:
-            its_result = [self._cache_chunk(i, relfile, f, *arg) for i, arg in self._wrap_tqdm(_gen)]
-        else:
-            ParallelObj = MapContext._get_parallel_object(self._estN)
-            its_result = ParallelObj(self.ncpu)(
-                delayed(self._cache_chunk)(i, relfile, f, *arg) for i, arg in _gen
-            )
-        # return
-        return its_result
+        _suffx = lambda i: add_suffix(i[0], relfile)
+        # args of (fn, f, *args)
+        _initial_args = (list(map(_suffx, zip(it.count(), self._generator_args(*args)))), it.repeat(f), *args)
+        # comprehension over cache initials.
+        return self._map_comp(self._cache_initial, *_initial_args)
 
     def _full_compute(self, f, *args):
         if self.is_filepath_set():
@@ -247,6 +238,19 @@ class MapContext:
         else:
             return self._map_comp(f, *args)
 
+    def _compute_wrap_audio(self, f, *args):
+        if self.end_audio:
+            try:
+                result = self._full_compute(f, *args)
+                # play music if possible
+                MapContext._play_success()
+                return result
+            except Exception:
+                MapContext._play_failure()
+        else:
+            return self._full_compute(f, *args)
+
+    """ !!!!!!!!!!!!!! ACTUAL FUNCTIONS BEGIN HERE !!!!!!!!!!!!!! """
 
     def is_fitted(self):
         """Whether 'compute' has been called. """
@@ -269,6 +273,8 @@ class MapContext:
             The function to call
         *args : list-like
             Arguments to pass as f(*args)
+        **kwargs : dict
+            Keyword-arguments passed to every iteration of f(*arg)
 
         Returns
         -------
@@ -276,26 +282,51 @@ class MapContext:
             The results from f(*args) or from file
         """
         self._Nargs = len(args)
-        # create a new function that wraps keywords into the call
-        f_new = partial(f, **kwargs)
-
+        # if we have no args, just call f using kws
         if self._Nargs == 0:
-            return f_new()
+            return f(**kwargs)
         # compute the number of arguments, and potential list within each argument if multiple.
         # if we have an iterable, just panick.
         self._estimate_n(*args)
-        # wrap in music?
+        # create a new function that wraps keywords into the call
+        f_new = partial(f, **kwargs)
+        # if we have end audio, play at end
+        return self._compute_wrap_audio(f_new, *args)
 
-        if self.end_audio:
-            try:
-                result = self._full_compute(f_new, *args)
-                # play music if possible
-                MapContext._play_success()
-                return result
-            except Exception as e:
-                MapContext._play_failure()
+    def compute_prod(self, f: Callable, *args, **kwargs):
+        """Computes the pipeline, using the product of *args.
+
+        Parameters
+        ----------
+        f : function
+            The function to call
+        *args : list-like
+            Arguments to pass as f(it.product(*args), **kwargs)
+        **kwargs : dict
+            Keyword-arguments passed to every iteration of f(*arg)
+
+        Returns
+        -------
+        res : Any
+            The results from f(*args) or from file
+        """
+        self._Nargs = len(args)
+        if self._Nargs == 0:
+            return f(**kwargs)
+        elif self._Nargs == 1:
+            # run normal
+            return self.compute(f, args[0], **kwargs)
         else:
-            return self._full_compute(f_new, *args)
+            # create a new function that wraps keywords into the call
+            f_new = partial(f, **kwargs)
+            # estimate n from the length of each argument.
+            _len_args = list(map(lambda arg: hasattr(arg, "__len__"), args))
+            if any(_len_args):
+                self._estN = reduce(operator.mul, map(len, it.compress(args, _len_args)))
+            # product over variables, and retuple (map)
+            new_args = (tuple(map(lambda t: t[i], it.product(*args))) for i in range(self._Nargs))
+            # now run...?
+            return self._compute_wrap_audio(f_new, *new_args)
 
     def clear(self):
         """Clears the cache."""

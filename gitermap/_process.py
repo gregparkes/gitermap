@@ -1,15 +1,39 @@
 """Handles the main processes of umaps."""
 from typing import Callable
+from functools import partial
 
 # local functions
 from ._context import MapContext
 
-__all__ = ['umap', 'umapc', 'umapp', 'umappc', 'umapcc', 'umappcc']
+__all__ = ['ugen', 'umap', 'umapc', 'umapp', 'umappc', 'umapcc', 'umappcc']
 
 """ ############# ACTUAL FUNCTIONS BEGIN HERE ########################### """
 
 
-def umap(f: Callable, *args):
+def ugen(f: Callable, *args, **kwargs):
+    """Performs MAP list-comprehension.
+
+    This is identicial to umap, except it returns an iterable for further use.
+
+    Parameters
+    ----------
+    f : function
+        The function to call
+    *args : list-like
+        Arguments to pass as f(*args), as a, ..., k
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
+
+    Returns
+    -------
+    res : iterable
+        The results from f(*args)
+    """
+    f_new = partial(f, **kwargs)
+    return map(f_new, *args)
+
+
+def umap(f: Callable, *args, **kwargs):
     """Performs MAP list-comprehension.
 
     Given function f(x) and arguments a, ..., k;
@@ -25,6 +49,8 @@ def umap(f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args), as a, ..., k
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -50,10 +76,10 @@ def umap(f: Callable, *args):
     >>> updated_func = partial(my_func, special=1.5)
     >>> umap(updated_func, [1, 3, 5], [2, 4, 6])
     """
-    return MapContext().compute(f, *args)
+    return MapContext().compute(f, *args, **kwargs)
 
 
-def umapc(fn: str, f: Callable, *args):
+def umapc(fn: str, f: Callable, *args, **kwargs):
     """Performs MAP comprehension with End-Cache.
 
     That is to say that the first time this runs,
@@ -72,6 +98,8 @@ def umapc(fn: str, f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args)
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -82,10 +110,10 @@ def umapc(fn: str, f: Callable, *args):
     --------
     See `gitermap.umap` for examples.
     """
-    return MapContext(fn).compute(f, *args)
+    return MapContext(fn).compute(f, *args, **kwargs)
 
 
-def umapp(f: Callable, *args):
+def umapp(f: Callable, *args, **kwargs):
     """Performs MAP comprehension with Parallelism.
 
     This assumes each iteration is independent
@@ -97,6 +125,8 @@ def umapp(f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args)
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -107,10 +137,10 @@ def umapp(f: Callable, *args):
     --------
     See `gitermap.umap` for examples.
     """
-    return MapContext(n_jobs=-1).compute(f, *args)
+    return MapContext(n_jobs=-1).compute(f, *args, **kwargs)
 
 
-def umappc(fn: str, f: Callable, *args):
+def umappc(fn: str, f: Callable, *args, **kwargs):
     """Performs MAP comprehension with Parallelism and End-Caching.
 
     That is to say that the first time this runs, function f(*args) is called,
@@ -128,6 +158,8 @@ def umappc(fn: str, f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args)
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -139,10 +171,10 @@ def umappc(fn: str, f: Callable, *args):
     See `gitermap.umapp` for examples.
     """
     # add f to args
-    return MapContext(fn, n_jobs=-1).compute(f, *args)
+    return MapContext(fn, n_jobs=-1).compute(f, *args, **kwargs)
 
 
-def umapcc(fn: str, f: Callable, *args):
+def umapcc(fn: str, f: Callable, *args, **kwargs):
     """Performs MAP comprehension with Caching by Chunks.
 
     That is to say that the first time this runs, function f(*args) is called,
@@ -162,6 +194,8 @@ def umapcc(fn: str, f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args)
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -172,10 +206,10 @@ def umapcc(fn: str, f: Callable, *args):
     --------
     See `gitermap.umap` for examples.
     """
-    return MapContext(fn, chunks=True).compute(f, *args)
+    return MapContext(fn, chunks=True).compute(f, *args, **kwargs)
 
 
-def umappcc(fn: str, f: Callable, *args):
+def umappcc(fn: str, f: Callable, *args, **kwargs):
     """Performs MAP comprehension with Parallelism and Caching by Chunks.
 
     That is to say that the first time this runs, function f(*args) is called,
@@ -197,6 +231,8 @@ def umappcc(fn: str, f: Callable, *args):
         The function to call
     *args : list-like
         Arguments to pass as f(*args)
+    **kwargs : dict
+        Keyword arguments that are passed to every call of f(*args)
 
     Returns
     -------
@@ -205,6 +241,6 @@ def umappcc(fn: str, f: Callable, *args):
 
     Examples
     --------
-    See `gitermap.umapp` for examples.
+    See `gitermap.umapcc` for examples.
     """
-    return MapContext(fn, n_jobs=-1, chunks=True).compute(f, *args)
+    return MapContext(fn, n_jobs=-1, chunks=True).compute(f, *args, **kwargs)
