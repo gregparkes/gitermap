@@ -71,6 +71,7 @@ class MapContext:
 
     @classmethod
     def _delete_temps(cls, directory):
+        """WARNING: DO NOT call this function lightly."""
         if os.path.isdir(directory):
             import shutil
             try:
@@ -109,7 +110,7 @@ class MapContext:
 
     @property
     def ncpu(self):
-        """create an ncpu property based on n_jobs """
+        """create an number of cpus property based on n_jobs """
         if self.n_jobs is None:
             return 1
         elif self.n_jobs == -1:
@@ -132,7 +133,7 @@ class MapContext:
         return self._fn if self._fn is not None else "temp.pkl"
 
     @property
-    def cachef(self):
+    def _cachef(self):
         """Retrieve the appropriate cache function"""
         if self.savemode == 'initial':
             return self._cache_initial
@@ -142,19 +143,21 @@ class MapContext:
             return self._cache_add
 
     def _load_file(self, fn=None):
+        # loads a file using joblib
         _file = self.filename if fn is None else fn
         if self.verbose > 0:
             print("loading from file '%s'" % _file)
         return load(_file, 'r')
 
     def _write_file(self, data, fn=None):
+        # writes a file using joblib
         _file = self.filename if fn is None else fn
         if self.verbose > 0:
             print("writing to file '%s'" % _file)
         dump(data, _file)
 
     def _estimate_n(self, *args):
-        # try and produce an `_estN` parameter. -1 means unobtainable
+        """try and produce an `_estN` parameter. -1 means unobtainable"""
         _len_args = list(map(lambda arg: hasattr(arg, "__len__"), args))
         # if there are any true, compress and take the first one
         if any(_len_args):
@@ -181,18 +184,16 @@ class MapContext:
                 ParallelObj = self._get_parallel_object()
                 return ParallelObj(self.ncpu)(result)
 
-    def _cache_initial(self, fn, f, *args):
-        if os.path.isfile(self._fn):
-            return self._load_file(fn)
-        else:
-            result = f(*args)
-            self._write_file(result, fn)
-            return result
-
     def _cache_override(self, fn, f, *args):
         result = f(*args)
         self._write_file(result, fn)
         return result
+
+    def _cache_initial(self, fn, f, *args):
+        if os.path.isfile(fn):
+            return self._load_file(fn)
+        else:
+            return self._cache_override(fn, f, *args)
 
     def _cache_add(self, fn, f, *args):
         init = self._load_file(fn) if os.path.isfile(self._fn) else []
@@ -228,13 +229,13 @@ class MapContext:
         if self.is_filepath_set():
             # definitely caching, determine whether partial or not
             if self.has_chunks:
-                result = self.cachef(self._fn, self._compute_chunks, f, *args)
+                result = self._cachef(self._fn, self._compute_chunks, f, *args)
                 # delete temps
                 _, cachedir = directory_info(self._fn)
                 MapContext._delete_temps(cachedir)
                 return result
             else:
-                return self.cachef(self._fn, self._map_comp, f, *args)
+                return self._cachef(self._fn, self._map_comp, f, *args)
         else:
             return self._map_comp(f, *args)
 
