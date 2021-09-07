@@ -2,3 +2,6 @@
 .ipynb_checkpoints
 *.pkl
 .idea
+build/*
+dist/*
+gitermap.egg-info

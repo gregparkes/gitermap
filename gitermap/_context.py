@@ -108,6 +108,9 @@ class MapContext:
         # close file pointer
         pass
 
+    def __repr__(self):
+        return f"MapContext(cache={self._fn}, verbose={self.verbose}, n_jobs={self.ncpu}, returns='{self.return_type}', savemode='{self.savemode}')"
+
     @property
     def ncpu(self):
         """create an number of cpus property based on n_jobs """
@@ -162,6 +165,10 @@ class MapContext:
         # if there are any true, compress and take the first one
         if any(_len_args):
             self._estN = len(list(it.compress(args, _len_args))[0])
+            # check that all arguments share same length, and if not, raise a ValueError
+            len1 = len(args[0])
+            if not all([len(a) == len1 for a in args]):
+                raise ValueError("not all arguments are of same length.")
 
     def _generator_args(self, *args):
         return args if self._Nargs == 0 else zip(*args)

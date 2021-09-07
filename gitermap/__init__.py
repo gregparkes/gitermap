@@ -4,7 +4,7 @@ from ._process import *
 from ._context import MapContext
 from ._uniquecontext import UniqueMapContext
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __name__ = "gitermap"
 __doc__ = """gitermap: Easy parallelizable and cacheable list comprehensions
 
