@@ -1,5 +1,9 @@
 # `gitermap`: Easy parallelizable and cacheable list comprehensions
 
+![pypi](https://img.shields.io/pypi/v/gitermap)
+![last commit](https://img.shields.io/github/last-commit/gregparkes/gitermap)
+![repo size](https://img.shields.io/github/repo-size/gregparkes/gitermap)
+
 List comprehensions and `map()` operations are great in Python, but sometimes it would be nice if they just *did more*. gitermap allows users to work through a map operation with seemlessly integrated parallelization and automatic end-caching or step-by-step caching within your workflow. Key functionalities include:
 
 - Easy parallelization built on top of `joblib`
@@ -10,6 +14,43 @@ List comprehensions and `map()` operations are great in Python, but sometimes it
 
 `gitermap` provides simple access with useful accessory functions, and detailed access through
 exposure to underlying classes via `MapContext` which neatly wrap the complexity for you.
+
+## How to use
+
+Install the latest version using pip:
+
+```bash
+pip install gitermap
+```
+
+or clone this repository and import it through more difficult methods. To run the tests, open up
+Terminal or Anaconda Prompt and navigate to the root directory and enter:
+
+```bash
+python tests.py
+```
+
+Ensure you have `pytest` package installed when running tests. You will also need `numpy
+`.
+
+## Requirements
+
+The following requirements are essential for `gitermap`:
+
+- Python >= 3.8
+- `joblib` >= 1.4
+
+The following packages are highly recommended but not essential:
+
+- `tqdm` >= 1.0: For progressbars
+
+For ending sound in `MapContext`, you will also need:
+
+- `numpy`: For processing sound waves
+- `simpleaudio`: For playing sounds
+
+The other packages such as `itertools`, `functools` and more are default and come with the standard Python distribution.
+
 
 ## Examples
 
@@ -87,21 +128,3 @@ we provide this through the `return_type` parameter:
 
 Note that generators do not also perform parallelization when evoked. 
 For further details, see the example notebooks within this project.
-
-## Requirements
-
-The following requirements are essential for `gitermap`:
-
-- Python >= 3.8
-- `joblib` >= 1.4
-
-The following packages are highly recommended but not essential:
-
-- `tqdm` >= 1.0: For progressbars
-
-For ending sound in `MapContext`, you will also need:
-
-- `numpy`: For processing sound waves
-- `simpleaudio`: For playing sounds
-
-The other packages such as `itertools`, `functools` and more are default and come with the standard Python distribution.
