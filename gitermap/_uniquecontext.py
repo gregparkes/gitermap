@@ -2,7 +2,7 @@ import warnings
 from functools import reduce
 import operator
 
-from ._context import MapContext
+from ._mapcontext import MapContext
 
 
 class UniqueMapContext(MapContext):

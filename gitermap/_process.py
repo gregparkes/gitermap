@@ -3,7 +3,7 @@ from typing import Callable
 from functools import partial
 
 # local functions
-from ._context import MapContext
+from ._mapcontext import MapContext
 
 __all__ = ['ugen', 'umap', 'umapc', 'umapp', 'umappc', 'umapcc', 'umappcc']
 

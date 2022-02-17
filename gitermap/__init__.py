@@ -1,7 +1,7 @@
 """init method for package."""
 
 from ._process import *
-from ._context import MapContext
+from ._mapcontext import MapContext
 from ._uniquecontext import UniqueMapContext
 
 __version__ = '0.3.0'
